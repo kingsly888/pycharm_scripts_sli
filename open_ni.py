@@ -1,4 +1,4 @@
-# ======================================= Login Script =======================================
+
 # ======================================= Login Script =======================================
 import panel as pn
 
@@ -316,6 +316,8 @@ df = df[~(df["ACCOUNT NUMBER"].isna() | (df["ACCOUNT NUMBER"].astype(str).str.st
 
 df = df[df["CLUSTER"] == "CLUSTER 3"]
 
+df = df[~df["SLI"].isin(["MYRIAD - MDU SOUTH", "MYRIAD - MDU NORTH"])]
+
 # ========================================= Assign FOR VISIT value for blank TECH STATUS =========================================
 
 df["TECH STATUS"] = df["TECH STATUS"].apply(lambda x: "FOR VISIT" if pd.isna(x) or str(x).strip() == "" else x)
@@ -434,6 +436,7 @@ import matplotlib.pyplot as plt
 import panel as pn
 import socket
 import os
+from datetime import datetime
 
 pn.extension("matplotlib", notifications=True)
 
@@ -449,15 +452,17 @@ jo_types = ["All"] + sorted(df["JO TYPE"].dropna().unique().tolist())
 cities = ["All"] + sorted(df["CITY"].dropna().unique().tolist())
 tags = ["All"] + sorted(df["TAG"].dropna().unique().tolist())
 jo_statuses = ["All"] + sorted(df["JO STATUS"].dropna().unique().tolist())
+tech_statuses = ["All"] + sorted(df["TECH STATUS"].dropna().unique().tolist())
 
 jo_filter = pn.widgets.Select(name="JO TYPE", options=jo_types)
 city_filter = pn.widgets.Select(name="CITY", options=cities)
 tag_filter = pn.widgets.Select(name="TAG", options=tags)
 jo_status_filter = pn.widgets.Select(name="JO STATUS", options=jo_statuses)
+tech_status_filter = pn.widgets.Select(name="TECH STATUS", options=tech_statuses)
 download_button = pn.widgets.Button(name="Download CSV", button_type="success")
 
 # ============ Plot Function ============
-def plot_ageing_bar(selected_jo_type, selected_city, selected_tag, selected_jo_status):
+def plot_ageing_bar(selected_jo_type, selected_city, selected_tag, selected_jo_status, selected_tech_status):
     df_filtered = df.copy()
 
     if selected_jo_type != "All":
@@ -468,6 +473,8 @@ def plot_ageing_bar(selected_jo_type, selected_city, selected_tag, selected_jo_s
         df_filtered = df_filtered[df_filtered["TAG"] == selected_tag]
     if selected_jo_status != "All":
         df_filtered = df_filtered[df_filtered["JO STATUS"] == selected_jo_status]
+    if selected_tech_status != "All":
+        df_filtered = df_filtered[df_filtered["TECH STATUS"] == selected_tech_status]
 
     df_filtered["AGEING (RANGE)"] = pd.Categorical(
         df_filtered["AGEING (RANGE)"], categories=ageing_order, ordered=True
@@ -505,8 +512,8 @@ def plot_ageing_bar(selected_jo_type, selected_city, selected_tag, selected_jo_s
 # ============ Download Callback ============
 def download_csv(event):
     downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
-    filename = "filtered_ageing_data.csv"
 
+    # Prepare filtered DataFrame
     df_filtered = df.copy()
     if jo_filter.value != "All":
         df_filtered = df_filtered[df_filtered["JO TYPE"] == jo_filter.value]
@@ -516,19 +523,33 @@ def download_csv(event):
         df_filtered = df_filtered[df_filtered["TAG"] == tag_filter.value]
     if jo_status_filter.value != "All":
         df_filtered = df_filtered[df_filtered["JO STATUS"] == jo_status_filter.value]
+    if tech_status_filter.value != "All":
+        df_filtered = df_filtered[df_filtered["TECH STATUS"] == tech_status_filter.value]
 
+    # Clean filter values for filename
+    def clean(val):
+        return val.replace(" ", "_").replace("/", "-") if val != "All" else "ALL"
+
+    jo_val = clean(jo_filter.value)
+    city_val = clean(city_filter.value)
+    tag_val = clean(tag_filter.value)
+    jo_status_val = clean(jo_status_filter.value)
+    tech_status_val = clean(tech_status_filter.value)
+    date_str = datetime.now().strftime("%Y%m%d")
+
+    filename = f"c3_ni_{jo_val}_{city_val}_{tag_val}_{jo_status_val}_{tech_status_val}_{date_str}.csv"
     save_path = os.path.join(downloads_path, filename)
-    df_filtered.to_csv(save_path, index=False)
 
-    pn.state.notifications.success("CSV downloaded successfully!")
+    df_filtered.to_csv(save_path, index=False)
+    pn.state.notifications.success(f"CSV saved as {filename}!")
 
 download_button.on_click(download_csv)
 
 # ============ Layout ============
 main_view = pn.Column(
     "# Cluster3 New Install Dashboard (powered by kingsly👑)",
-    pn.Row(jo_filter, city_filter, tag_filter, jo_status_filter),
-    pn.bind(plot_ageing_bar, jo_filter, city_filter, tag_filter, jo_status_filter),
+    pn.Row(jo_filter, city_filter, tag_filter, jo_status_filter, tech_status_filter),
+    pn.bind(plot_ageing_bar, jo_filter, city_filter, tag_filter, jo_status_filter, tech_status_filter),
     pn.Row(download_button, sizing_mode="stretch_width")
 )
 
@@ -543,12 +564,134 @@ def find_free_port():
 if __name__ == "__main__":
     port = find_free_port()
     print(f"Launching on http://localhost:{port}")
-    pn.serve(app_panel, port=port, show=True)
+    pn.serve(main_view, port=port, show=True)
 
+
+# import pandas as pd
+# import seaborn as sns
+# import matplotlib.pyplot as plt
+# import panel as pn
+# import socket
+# import os
+#
+# pn.extension("matplotlib", notifications=True)
+#
+# # ============ AGEING Order ============
+# ageing_order = [
+#     "1-4Hrs", ">4-8Hrs", ">8-12Hrs", ">12Hrs-1Day",
+#     ">1Day-2Days", ">2Days-3Days", ">3Days-4Days",
+#     ">4Days-5Days", ">5Days-7Days", ">7Days"
+# ]
+#
+# # ============ Filters ============
+# jo_types = ["All"] + sorted(df["JO TYPE"].dropna().unique().tolist())
+# cities = ["All"] + sorted(df["CITY"].dropna().unique().tolist())
+# tags = ["All"] + sorted(df["TAG"].dropna().unique().tolist())
+# jo_statuses = ["All"] + sorted(df["JO STATUS"].dropna().unique().tolist())
+# tech_statuses = ["All"] + sorted(df["TECH STATUS"].dropna().unique().tolist())
+#
+# jo_filter = pn.widgets.Select(name="JO TYPE", options=jo_types)
+# city_filter = pn.widgets.Select(name="CITY", options=cities)
+# tag_filter = pn.widgets.Select(name="TAG", options=tags)
+# jo_status_filter = pn.widgets.Select(name="JO STATUS", options=jo_statuses)
+# tech_status_filter = pn.widgets.Select(name="TECH STATUS", options=tech_statuses)
+# download_button = pn.widgets.Button(name="Download CSV", button_type="success")
+#
+# # ============ Plot Function ============
+# def plot_ageing_bar(selected_jo_type, selected_city, selected_tag, selected_jo_status, selected_tech_status):
+#     df_filtered = df.copy()
+#
+#     if selected_jo_type != "All":
+#         df_filtered = df_filtered[df_filtered["JO TYPE"] == selected_jo_type]
+#     if selected_city != "All":
+#         df_filtered = df_filtered[df_filtered["CITY"] == selected_city]
+#     if selected_tag != "All":
+#         df_filtered = df_filtered[df_filtered["TAG"] == selected_tag]
+#     if selected_jo_status != "All":
+#         df_filtered = df_filtered[df_filtered["JO STATUS"] == selected_jo_status]
+#     if selected_tech_status != "All":
+#         df_filtered = df_filtered[df_filtered["TECH STATUS"] == selected_tech_status]
+#
+#     df_filtered["AGEING (RANGE)"] = pd.Categorical(
+#         df_filtered["AGEING (RANGE)"], categories=ageing_order, ordered=True
+#     )
+#
+#     ageing_counts = (
+#         df_filtered.groupby("AGEING (RANGE)")["_RowNumber"]
+#         .count()
+#         .reindex(ageing_order)
+#         .fillna(0)
+#         .reset_index()
+#         .rename(columns={"_RowNumber": "Count"})
+#     )
+#
+#     total = int(ageing_counts["Count"].sum())
+#
+#     fig, ax = plt.subplots(figsize=(10, 6))
+#     sns.barplot(data=ageing_counts, x="AGEING (RANGE)", y="Count", ax=ax,
+#                 palette="Blues_d", edgecolor=None)
+#
+#     for container in ax.containers:
+#         ax.bar_label(container, fmt=lambda x: f"{int(x):,}", label_type='edge', padding=3, fontsize=10)
+#
+#     ax.set_title(f"Job Orders by Ageing Range (Total: {total:,})", fontsize=14)
+#     ax.set_xlabel("Ageing Range")
+#     ax.set_ylabel("Count of Job Orders")
+#     ax.set_xticklabels(ageing_counts["AGEING (RANGE)"], rotation=45)
+#
+#     sns.despine(ax=ax, top=True, right=True)
+#     ax.grid(axis='y', linestyle='--', alpha=0.7)
+#     plt.tight_layout()
+#
+#     return pn.pane.Matplotlib(fig, tight=True)
+#
+# # ============ Download Callback ============
+# def download_csv(event):
+#     downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+#     filename = "filtered_ageing_data.csv"
+#
+#     df_filtered = df.copy()
+#     if jo_filter.value != "All":
+#         df_filtered = df_filtered[df_filtered["JO TYPE"] == jo_filter.value]
+#     if city_filter.value != "All":
+#         df_filtered = df_filtered[df_filtered["CITY"] == city_filter.value]
+#     if tag_filter.value != "All":
+#         df_filtered = df_filtered[df_filtered["TAG"] == tag_filter.value]
+#     if jo_status_filter.value != "All":
+#         df_filtered = df_filtered[df_filtered["JO STATUS"] == jo_status_filter.value]
+#     if tech_status_filter.value != "All":
+#         df_filtered = df_filtered[df_filtered["TECH STATUS"] == tech_status_filter.value]
+#
+#     save_path = os.path.join(downloads_path, filename)
+#     df_filtered.to_csv(save_path, index=False)
+#
+#     pn.state.notifications.success("CSV downloaded successfully!")
+#
+# download_button.on_click(download_csv)
+#
+# # ============ Layout ============
+# main_view = pn.Column(
+#     "# Cluster3 New Install Dashboard (powered by kingsly👑)",
+#     pn.Row(jo_filter, city_filter, tag_filter, jo_status_filter, tech_status_filter),
+#     pn.bind(plot_ageing_bar, jo_filter, city_filter, tag_filter, jo_status_filter, tech_status_filter),
+#     pn.Row(download_button, sizing_mode="stretch_width")
+# )
+#
+# # ============ Serve App ============
+# def find_free_port():
+#     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#     s.bind(('', 0))
+#     addr, port = s.getsockname()
+#     s.close()
+#     return port
+#
 # if __name__ == "__main__":
 #     port = find_free_port()
 #     print(f"Launching on http://localhost:{port}")
 #     pn.serve(main_view, port=port, show=True)
+
+
+
 
 
 
